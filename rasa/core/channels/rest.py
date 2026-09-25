@@ -1,10 +1,10 @@
 import asyncio
 import copy
-import inspect
 import json
 import logging
 import structlog
 from asyncio import Queue, CancelledError
+from functools import partial
 from sanic import Blueprint, response
 from sanic.request import Request
 from sanic.response import HTTPResponse, ResponseStream
@@ -77,14 +77,15 @@ class RestInput(InputChannel):
         """
         return request.json.get("metadata", None)
 
-    def stream_response(
+    async def stream_response(
         self,
         on_new_message: Callable[[UserMessage], Awaitable[None]],
         text: Text,
         sender_id: Text,
         input_channel: Text,
         metadata: Optional[Dict[Text, Any]],
-    ) -> Callable[[Any], Awaitable[None]]:
+        resp: ResponseStream,
+    ) -> None:
         """Streams response to the client.
 
          If the stream option is enabled, this method will be called to
@@ -96,42 +97,30 @@ class RestInput(InputChannel):
             sender_id: message sender_id
             input_channel: input channel name
             metadata: optional metadata sent with the message
+            resp: response stream to write the messages to
 
         Returns:
-            Sanic stream
+            None
         """
-
-        async def stream(resp: Any) -> None:
-            q: Queue = Queue()
-            task = asyncio.ensure_future(
-                self.on_message_wrapper(
-                    on_new_message, text, q, sender_id, input_channel, metadata
-                )
+        q: Queue = Queue()
+        task = asyncio.ensure_future(
+            self.on_message_wrapper(
+                on_new_message, text, q, sender_id, input_channel, metadata
             )
-            while True:
-                result = await q.get()
-                if result == "DONE":
-                    break
-                else:
-                    await resp.write(json.dumps(result) + "\n")
-            await task
-
-        return stream
+        )
+        while True:
+            result = await q.get()
+            if result == "DONE":
+                break
+            else:
+                await resp.write(json.dumps(result) + "\n")
+        await task
 
     def blueprint(
         self, on_new_message: Callable[[UserMessage], Awaitable[None]]
     ) -> Blueprint:
         """Groups the collection of endpoints used by rest channel."""
-        module_type = inspect.getmodule(self)
-        if module_type is not None:
-            module_name = module_type.__name__
-        else:
-            module_name = None
-
-        custom_webhook = Blueprint(
-            "custom_webhook_{}".format(type(self).__name__),
-            module_name,
-        )
+        custom_webhook = Blueprint("custom_webhook_{}".format(type(self).__name__))
 
         # noinspection PyUnusedLocal
         @custom_webhook.route("/", methods=["GET"])
@@ -149,9 +138,14 @@ class RestInput(InputChannel):
             metadata = self.get_metadata(request)
 
             if should_use_stream:
-                return response.stream(
-                    self.stream_response(
-                        on_new_message, text, sender_id, input_channel, metadata
+                return ResponseStream(
+                    partial(
+                        self.stream_response,
+                        on_new_message,
+                        text,
+                        sender_id,
+                        input_channel,
+                        metadata,
                     ),
                     content_type="text/event-stream",
                 )

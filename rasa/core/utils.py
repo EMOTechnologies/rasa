@@ -102,12 +102,6 @@ def list_routes(app: Sanic) -> Dict[Text, Text]:
 
     output = {}
 
-    def find_route(suffix: Text, path: Text) -> Optional[Text]:
-        for name, (uri, _) in app.router.routes_names.items():
-            if name.split(".")[-1] == suffix and uri == path:
-                return name
-        return None
-
     for route in app.router.routes:
         endpoint = route.parts
         if endpoint[:-1] in app.router.routes_all and endpoint[-1] == "/":

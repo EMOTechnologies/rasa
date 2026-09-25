@@ -1,12 +1,12 @@
 import tempfile
-import ruamel.yaml as yaml
+import rasa.shared.utils.io
 
 
 def write_file_config(file_config):
     with tempfile.NamedTemporaryFile(
         "w+", suffix="_tmp_config_file.yml", delete=False
     ) as f:
-        f.write(yaml.safe_dump(file_config))
+        f.write(rasa.shared.utils.io.dump_obj_as_yaml_to_string(file_config))
         f.flush()
         return f
 

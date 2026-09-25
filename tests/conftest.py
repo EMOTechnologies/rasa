@@ -229,6 +229,70 @@ def loop(
     yield event_loop
 
 
+class _RunningTestServer:
+    """A Sanic test server bound to a caller-supplied event loop.
+
+    `pytest_sanic`'s own `sanic_client` fixture starts the app using Sanic's
+    pre-22 private server internals, which no longer exist. This is a minimal
+    replacement covering only what our tests need: a server that keeps
+    running for the duration of a test (unlike `sanic_testing`'s
+    `app.test_client`, which starts and stops the app per request) so other
+    code can make independent requests against it while the test awaits.
+    """
+
+    def __init__(self, app: Sanic, loop: asyncio.AbstractEventLoop) -> None:
+        self.app = app
+        self._loop = loop
+        self.host = "127.0.0.1"
+        self.port = 0
+        self._server: Any = None
+
+    async def start_server(self) -> "_RunningTestServer":
+        import socket
+
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.bind((self.host, 0))
+            self.port = probe.getsockname()[1]
+
+        server_co = self.app.create_server(
+            host=self.host, port=self.port, return_asyncio_server=True
+        )
+        self.app.router.reset()
+        self.app.signal_router.reset()
+        await self.app._startup()
+        await self.app._server_event("init", "before", loop=self._loop)
+        self._server = await server_co
+        await self.app._server_event("init", "after", loop=self._loop)
+        return self
+
+    def make_url(self, uri: Text) -> Text:
+        return f"http://{self.host}:{self.port}{uri}"
+
+    async def close(self) -> None:
+        await self.app._server_event("shutdown", "before", loop=self._loop)
+        self._server.close()
+        await self._server.wait_closed()
+        await self.app._server_event("shutdown", "after", loop=self._loop)
+
+
+@pytest.fixture
+def sanic_client(
+    loop: asyncio.AbstractEventLoop,
+) -> Generator[Callable, None, None]:
+    servers: List[_RunningTestServer] = []
+
+    async def _start_server(app: Sanic) -> _RunningTestServer:
+        test_server = _RunningTestServer(app, loop)
+        await test_server.start_server()
+        servers.append(test_server)
+        return test_server
+
+    yield _start_server
+
+    for test_server in servers:
+        loop.run_until_complete(test_server.close())
+
+
 @pytest.fixture(scope="session")
 async def trained_default_agent_model(
     stories_path: Text,

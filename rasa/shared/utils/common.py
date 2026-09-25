@@ -1,13 +1,35 @@
 import asyncio
 import functools
 import importlib
+import importlib.util
 import inspect
 import logging
+import os
 from typing import Text, Dict, Optional, Any, List, Callable, Collection, Type
 
 from rasa.shared.exceptions import RasaException
 
 logger = logging.getLogger(__name__)
+
+
+def resource_filename(module_name: Text, resource: Text) -> Text:
+    """Returns the filesystem path of a resource relative to a module or package.
+
+    Args:
+        module_name: Dotted name of a module or package.
+        resource: Path of the resource relative to the module's directory.
+
+    Returns:
+        The absolute path to the resource.
+    """
+    spec = importlib.util.find_spec(module_name)
+    if spec is None:
+        raise ModuleNotFoundError(f"No module named '{module_name}'")
+    if spec.submodule_search_locations:
+        base_dir = list(spec.submodule_search_locations)[0]
+    else:
+        base_dir = os.path.dirname(spec.origin)
+    return os.path.join(base_dir, resource.lstrip("/"))
 
 
 def class_from_module_path(

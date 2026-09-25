@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Text
+from functools import partial
+from typing import Any, Dict, List, Optional, Text, Tuple
 
 import dask
 
@@ -11,6 +12,11 @@ from rasa.engine.runner.interface import GraphRunner
 from rasa.engine.storage.storage import ModelStorage
 
 logger = logging.getLogger(__name__)
+
+
+def _named_input(name: Text, value: Any) -> Tuple[Text, Any]:
+    """Mimics the `(node name, result)` output of a graph node for a run input."""
+    return name, value
 
 
 class DaskGraphRunner(GraphRunner):
@@ -115,4 +121,4 @@ class DaskGraphRunner(GraphRunner):
                     f"that none of the input names passed to the `run` method are the "
                     f"same as node names in the graph schema."
                 )
-            graph[input_name] = (input_name, input_value)
+            graph[input_name] = (partial(_named_input, input_name), input_value)
