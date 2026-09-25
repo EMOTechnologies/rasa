@@ -388,7 +388,7 @@ def test_nlu_warn_if_lookup_table_and_crf_extractor_pattern_feature_mismatch(
             f"You have defined training data consisting of lookup tables, "
             f"but your NLU configuration's "
             f"'{CRFEntityExtractor.__name__}' does not include the "
-            f"'{CRFEntityExtractorOptions.PATTERN}' feature"
+            f"'{CRFEntityExtractorOptions.PATTERN.value}' feature"
         )
 
         with pytest.warns(UserWarning, match=match):
