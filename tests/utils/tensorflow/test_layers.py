@@ -1,4 +1,5 @@
 from typing import Text, List, Tuple, Union, Optional
+import math
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
 import numpy as np
@@ -351,7 +352,7 @@ def test_multi_label_dot_product_loss__loss_sigmoid_is_ln2_when_all_similarities
         num_candidates, scale_loss=False, similarity_type=INNER
     )
     loss = layer._loss_sigmoid(sim_pos, sim_candidates_il, pos_neg_labels)
-    assert abs(loss.numpy() - np.math.log(2.0)) < 1e-6
+    assert abs(loss.numpy() - math.log(2.0)) < 1e-6
 
 
 @pytest.mark.parametrize(

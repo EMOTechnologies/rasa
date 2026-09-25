@@ -6,7 +6,7 @@ import sys
 import tempfile
 import uuid
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from tarsafe import TarSafe
 from typing import Generator, Optional, Text, Tuple, Union
@@ -232,7 +232,7 @@ class LocalModelStorage(ModelStorage):
         domain: Domain, model_configuration: GraphModelConfiguration
     ) -> ModelMetadata:
         return ModelMetadata(
-            trained_at=datetime.utcnow(),
+            trained_at=datetime.now(timezone.utc).replace(tzinfo=None),
             rasa_open_source_version=rasa.__version__,
             model_id=uuid.uuid4().hex,
             assistant_id=model_configuration.assistant_id,

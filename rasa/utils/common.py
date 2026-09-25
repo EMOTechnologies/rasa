@@ -26,6 +26,7 @@ from typing import (
 )
 
 import numpy as np
+from numpy.exceptions import VisibleDeprecationWarning
 
 import rasa.shared.utils.io
 import rasa.utils.io
@@ -53,7 +54,7 @@ EXPECTED_PILLOW_DEPRECATION_WARNINGS: List[Tuple[Type[Warning], str]] = [
 EXPECTED_WARNINGS: List[Tuple[Type[Warning], str]] = [
     # TODO (issue #9932)
     (
-        np.VisibleDeprecationWarning,
+        VisibleDeprecationWarning,
         "Creating an ndarray from ragged nested sequences.*",
     ),
     # cf. https://github.com/tensorflow/tensorflow/issues/38168

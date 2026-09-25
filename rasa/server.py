@@ -679,7 +679,11 @@ def create_app(
     app.ctx.agent = agent
     # Initialize shared object of type unsigned int for tracking
     # the number of active training processes
-    app.ctx.active_training_processes = multiprocessing.Value("I", 0)
+    # Use an explicit context so creating the value does not fix the global
+    # multiprocessing start method, which Sanic needs to set itself.
+    app.ctx.active_training_processes = multiprocessing.get_context("spawn").Value(
+        "I", 0
+    )
 
     @app.exception(ErrorResponse)
     async def handle_error_response(

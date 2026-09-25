@@ -310,9 +310,9 @@ def _replace_edge_labels_with_nodes(
 
 
 def visualization_html_path() -> Text:
-    import pkg_resources
+    from rasa.shared.utils.common import resource_filename
 
-    return pkg_resources.resource_filename(__name__, VISUALIZATION_TEMPLATE_PATH)
+    return resource_filename(__name__, VISUALIZATION_TEMPLATE_PATH)
 
 
 def persist_graph(graph: "networkx.Graph", output_file: Text) -> None:

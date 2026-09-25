@@ -134,7 +134,7 @@ nlu:
 def test_wrong_format_raises():
 
     wrong_yaml_nlu_content = """
-    !!
+    nlu: [unclosed
     """
 
     parser = RasaYAMLReader()

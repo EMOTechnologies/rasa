@@ -3,7 +3,7 @@ import os
 from typing import Text, Dict, List, Optional, Any
 
 from packaging import version
-from packaging.version import LegacyVersion
+from packaging.version import InvalidVersion
 from pykwalify.errors import SchemaError
 
 from ruamel.yaml.constructor import DuplicateKeyError
@@ -131,7 +131,7 @@ def validate_yaml_schema(
     from pykwalify.core import Core
     from pykwalify.errors import SchemaError
     from ruamel.yaml import YAMLError
-    import pkg_resources
+    from rasa.shared.utils.common import resource_filename
     import logging
 
     log = logging.getLogger("pykwalify")
@@ -149,13 +149,9 @@ def validate_yaml_schema(
     except (YAMLError, DuplicateKeyError) as e:
         raise YamlSyntaxException(underlying_yaml_exception=e)
 
-    schema_file = pkg_resources.resource_filename(package_name, schema_path)
-    schema_utils_file = pkg_resources.resource_filename(
-        PACKAGE_NAME, RESPONSES_SCHEMA_FILE
-    )
-    schema_extensions = pkg_resources.resource_filename(
-        PACKAGE_NAME, SCHEMA_EXTENSIONS_FILE
-    )
+    schema_file = resource_filename(package_name, schema_path)
+    schema_utils_file = resource_filename(PACKAGE_NAME, RESPONSES_SCHEMA_FILE)
+    schema_extensions = resource_filename(PACKAGE_NAME, SCHEMA_EXTENSIONS_FILE)
 
     # Load schema content using our YAML loader as `pykwalify` uses a global instance
     # which can fail when used concurrently
@@ -249,9 +245,6 @@ def validate_training_data_format_version(
         parsed_version = version.parse(version_value)
         latest_version = version.parse(LATEST_TRAINING_DATA_FORMAT_VERSION)
 
-        if isinstance(parsed_version, LegacyVersion):
-            raise TypeError
-
         if parsed_version < latest_version:
             rasa.shared.utils.io.raise_warning(
                 f"Training data file {filename} has a lower "
@@ -268,7 +261,7 @@ def validate_training_data_format_version(
 
             return True
 
-    except TypeError:
+    except (TypeError, InvalidVersion):
         rasa.shared.utils.io.raise_warning(
             f"Training data file {filename} must specify "
             f"'{KEY_TRAINING_DATA_FORMAT_VERSION}' as string, for example:\n"

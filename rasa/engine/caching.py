@@ -4,7 +4,7 @@ import abc
 import logging
 import os
 import shutil
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Text, Any, Optional, Tuple, List
 
@@ -290,7 +290,7 @@ class LocalTrainingCache(TrainingCache):
             cache_entry = self.CacheEntry(
                 fingerprint_key=fingerprint_key,
                 output_fingerprint_key=output_fingerprint,
-                last_used=datetime.utcnow(),
+                last_used=datetime.now(timezone.utc).replace(tzinfo=None),
                 rasa_version=rasa.__version__,
                 result_location=cache_dir,
                 result_type=output_type,
@@ -392,7 +392,7 @@ class LocalTrainingCache(TrainingCache):
 
             if match:
                 # This result was used during a fingerprint run.
-                match.last_used = datetime.utcnow()
+                match.last_used = datetime.now(timezone.utc).replace(tzinfo=None)
                 return match.output_fingerprint_key
 
             return None

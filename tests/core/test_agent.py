@@ -9,7 +9,6 @@ import uuid
 from aioresponses import aioresponses
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
-from pytest_sanic.utils import TestClient
 from sanic import Sanic, response
 from sanic.request import Request
 from sanic.response import ResponseStream
@@ -63,7 +62,7 @@ def model_server_app(model_path: Text, model_hash: Text = "somehash") -> Sanic:
 @pytest.fixture()
 def model_server(
     loop: asyncio.AbstractEventLoop, sanic_client: Callable, trained_rasa_model: Text
-) -> TestClient:
+) -> Any:
     app = model_server_app(trained_rasa_model, model_hash="somehash")
     return loop.run_until_complete(sanic_client(app))
 
@@ -139,7 +138,7 @@ async def test_agent_wrong_use_of_load():
 
 
 async def test_agent_with_model_server_in_thread(
-    model_server: TestClient, domain: Domain
+    model_server: Any, domain: Domain
 ):
     model_endpoint_config = EndpointConfig.from_dict(
         {"url": model_server.make_url("/model"), "wait_time_between_pulls": 2}
@@ -161,7 +160,7 @@ async def test_agent_with_model_server_in_thread(
 
 
 async def test_wait_time_between_pulls_without_interval(
-    model_server: TestClient, monkeypatch: MonkeyPatch
+    model_server: Any, monkeypatch: MonkeyPatch
 ):
     monkeypatch.setattr(
         "rasa.core.agent._schedule_model_pulling", lambda *args: 1 / 0

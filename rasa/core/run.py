@@ -31,6 +31,7 @@ from rasa.core.channels.channel import InputChannel
 from rasa.core.utils import AvailableEndpoints
 import rasa.shared.utils.io
 from sanic import Sanic
+from sanic.worker.loader import AppLoader
 from asyncio import AbstractEventLoop
 
 
@@ -153,18 +154,16 @@ def configure_app(
     if logger.isEnabledFor(logging.DEBUG):
         rasa.core.utils.list_routes(app)
 
-    async def configure_async_logging() -> None:
+    @app.main_process_start
+    async def configure_async_logging(running_app: Sanic) -> None:
         if logger.isEnabledFor(logging.DEBUG):
             rasa.utils.io.enable_async_loop_debugging(asyncio.get_event_loop())
 
-    app.add_task(configure_async_logging)
-
     if "cmdline" in {c.name() for c in input_channels}:
 
+        @app.after_server_start
         async def run_cmdline_io(running_app: Sanic) -> None:
             """Small wrapper to shut down the server once cmd io is done."""
-            await asyncio.sleep(1)  # allow server to start
-
             await console.record_messages(
                 server_url=constants.DEFAULT_SERVER_FORMAT.format("http", port),
                 sender_id=conversation_id,
@@ -173,9 +172,10 @@ def configure_app(
 
             logger.info("Killing Sanic server now.")
             running_app.stop()  # kill the sanic server
-            plugin_manager().hook.after_server_stop()
 
-        app.add_task(run_cmdline_io)
+    @app.after_server_stop
+    async def after_server_stop(running_app: Sanic) -> None:
+        plugin_manager().hook.after_server_stop()
 
     if server_listeners:
         for (listener, event) in server_listeners:
@@ -218,6 +218,97 @@ def serve_application(
 
     input_channels = create_http_input_channels(channel, credentials)
 
+    ssl_context = server.create_ssl_context(
+        ssl_certificate, ssl_keyfile, ssl_ca_file, ssl_password
+    )
+    protocol = "https" if ssl_context else "http"
+
+    logger.info(f"Starting Rasa server on {protocol}://{interface}:{port}")
+
+    number_of_workers = rasa.core.utils.number_of_sanic_workers(
+        endpoints.lock_store if endpoints else None
+    )
+
+    telemetry.track_server_start(
+        input_channels, endpoints, model_path, number_of_workers, enable_api
+    )
+
+    rasa.utils.common.update_sanic_log_level(
+        log_file, use_syslog, syslog_address, syslog_port, syslog_protocol
+    )
+
+    # Sanic worker processes re-create the app using this factory, therefore
+    # everything which configures the app has to happen inside of it.
+    loader = AppLoader(
+        factory=partial(
+            _create_serving_app,
+            channel=channel,
+            credentials=credentials,
+            cors=cors,
+            auth_token=auth_token,
+            enable_api=enable_api,
+            response_timeout=response_timeout,
+            jwt_secret=jwt_secret,
+            jwt_private_key=jwt_private_key,
+            jwt_method=jwt_method,
+            endpoints=endpoints,
+            remote_storage=remote_storage,
+            log_file=log_file,
+            conversation_id=conversation_id,
+            use_syslog=use_syslog,
+            syslog_address=syslog_address,
+            syslog_port=syslog_port,
+            syslog_protocol=syslog_protocol,
+            request_timeout=request_timeout,
+            server_listeners=server_listeners,
+            model_path=model_path,
+            port=port,
+        )
+    )
+    app = loader.load()
+
+    run_kwargs: Dict[Text, Any] = dict(
+        host=interface,
+        port=port,
+        ssl=ssl_context,
+        backlog=int(os.environ.get(ENV_SANIC_BACKLOG, "100")),
+        workers=number_of_workers,
+    )
+    if number_of_workers == 1:
+        # Serve in the current process (e.g. needed for the interactive command
+        # line channel, which requires access to stdin).
+        app.run(single_process=True, **run_kwargs)
+    else:
+        app.prepare(**run_kwargs)
+        Sanic.serve(primary=app, app_loader=loader)
+
+
+def _create_serving_app(
+    channel: Optional[Text],
+    credentials: Optional[Text],
+    cors: Optional[Union[Text, List[Text]]],
+    auth_token: Optional[Text],
+    enable_api: bool,
+    response_timeout: int,
+    jwt_secret: Optional[Text],
+    jwt_private_key: Optional[Text],
+    jwt_method: Optional[Text],
+    endpoints: Optional[AvailableEndpoints],
+    remote_storage: Optional[Text],
+    log_file: Optional[Text],
+    conversation_id: Optional[Text],
+    use_syslog: Optional[bool],
+    syslog_address: Optional[Text],
+    syslog_port: Optional[int],
+    syslog_protocol: Optional[Text],
+    request_timeout: Optional[int],
+    server_listeners: Optional[List[Tuple[Callable, Text]]],
+    model_path: Optional[Text],
+    port: int,
+) -> Sanic:
+    """Creates and fully configures the Sanic app for serving Rasa."""
+    input_channels = create_http_input_channels(channel, credentials)
+
     app = configure_app(
         input_channels,
         cors,
@@ -239,39 +330,13 @@ def serve_application(
         server_listeners=server_listeners,
     )
 
-    ssl_context = server.create_ssl_context(
-        ssl_certificate, ssl_keyfile, ssl_ca_file, ssl_password
-    )
-    protocol = "https" if ssl_context else "http"
-
-    logger.info(f"Starting Rasa server on {protocol}://{interface}:{port}")
-
     app.register_listener(
         partial(load_agent_on_start, model_path, endpoints, remote_storage),
         "before_server_start",
     )
-
     app.register_listener(close_resources, "after_server_stop")
 
-    number_of_workers = rasa.core.utils.number_of_sanic_workers(
-        endpoints.lock_store if endpoints else None
-    )
-
-    telemetry.track_server_start(
-        input_channels, endpoints, model_path, number_of_workers, enable_api
-    )
-
-    rasa.utils.common.update_sanic_log_level(
-        log_file, use_syslog, syslog_address, syslog_port, syslog_protocol
-    )
-
-    app.run(
-        host=interface,
-        port=port,
-        ssl=ssl_context,
-        backlog=int(os.environ.get(ENV_SANIC_BACKLOG, "100")),
-        workers=number_of_workers,
-    )
+    return app
 
 
 # noinspection PyUnusedLocal

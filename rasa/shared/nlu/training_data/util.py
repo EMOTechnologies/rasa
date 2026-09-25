@@ -221,5 +221,7 @@ def sparse_matrix_to_string(m: scipy.sparse.spmatrix) -> Text:
     """
     # make sure sparse matrix is in COOrdinate format
     m_coo = m.tocoo()
-    triples = zip(list(zip(m_coo.row, m_coo.col)), m_coo.data)
+    triples = zip(
+        list(zip(m_coo.row.tolist(), m_coo.col.tolist())), m_coo.data.tolist()
+    )
     return "\n".join([("  %s\t%s" % t) for t in triples])

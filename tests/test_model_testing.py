@@ -1,3 +1,4 @@
+from unittest import mock
 import asyncio
 import sys
 from pathlib import Path
@@ -355,7 +356,7 @@ async def test_e2e_warning_if_no_nlu_model(
     # Patching is bit more complicated as we have a module `train` and function
     # with the same name 😬
     monkeypatch.setattr(
-        sys.modules["rasa.core.test"], "test", asyncio.coroutine(lambda *_, **__: True)
+        sys.modules["rasa.core.test"], "test", mock.AsyncMock(return_value=True)
     )
 
     await test_core(trained_core_model, use_conversation_test_files=True)
